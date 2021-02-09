@@ -12,6 +12,21 @@
 #include "stdafx.h"
 #include "D3D12HelloTexture.h"
 
+static std::vector<char> load_file(const char* path) {
+    FILE* f = fopen(path, "r");
+    if (!f) {
+        printf("Could not open file %s\n", path);
+        exit(1);
+    }
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    std::vector<char> data(len);
+    fread(data.data(), 1, len, f);
+    fclose(f);
+    return data;
+}
+
 D3D12HelloTexture::D3D12HelloTexture(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
     m_frameIndex(0),

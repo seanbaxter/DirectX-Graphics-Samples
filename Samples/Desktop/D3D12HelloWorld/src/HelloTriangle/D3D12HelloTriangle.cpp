@@ -11,6 +11,26 @@
 
 #include "stdafx.h"
 #include "D3D12HelloTriangle.h"
+#include <atlbase.h>
+
+static std::vector<char> load_file(const char* path) {
+    FILE* f = fopen(path, "r");
+    if (!f) {
+        printf("Could not open file %s\n", path);
+        exit(1);
+    }
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    std::vector<char> data(len);
+    fread(data.data(), 1, len, f);
+    fclose(f);
+    return data;
+}
+
+D3D12_SHADER_BYTECODE get_bytecode(std::vector<char>& vec) {
+    return { vec.data(), vec.size() };
+}
 
 D3D12HelloTriangle::D3D12HelloTriangle(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
@@ -20,9 +40,29 @@ D3D12HelloTriangle::D3D12HelloTriangle(UINT width, UINT height, std::wstring nam
     m_rtvDescriptorSize(0)
 {
 }
+void EnableShaderBasedValidation()
+{
+    CComPtr<ID3D12Debug> spDebugController0;
+    CComPtr<ID3D12Debug1> spDebugController1;
+    D3D12GetDebugInterface(IID_PPV_ARGS(&spDebugController0));
+    spDebugController0->QueryInterface(IID_PPV_ARGS(&spDebugController1));
+    spDebugController1->SetEnableGPUBasedValidation(true);
+}
 
 void D3D12HelloTriangle::OnInit()
 {
+
+    EnableShaderBasedValidation();
+
+    static const UUID D3D12ExperimentalShaderModels = { /* 76f5573e-f13a-40f5-b297-81ce9e18933f */
+        0x76f5573e,
+        0xf13a,
+        0x40f5,
+        { 0xb2, 0x97, 0x81, 0xce, 0x9e, 0x18, 0x93, 0x3f }
+    };
+
+    D3D12EnableExperimentalFeatures(1, &D3D12ExperimentalShaderModels, nullptr, nullptr);
+
     LoadPipeline();
     LoadAssets();
 }
@@ -150,8 +190,8 @@ void D3D12HelloTriangle::LoadAssets()
 
     // Create the pipeline state, which includes compiling and loading shaders.
     {
-        ComPtr<ID3DBlob> vertexShader;
-        ComPtr<ID3DBlob> pixelShader;
+        // ComPtr<ID3DBlob> vertexShader;
+        // ComPtr<ID3DBlob> pixelShader;
 
 #if defined(_DEBUG)
         // Enable better shader debugging with the graphics debugging tools.
@@ -160,22 +200,34 @@ void D3D12HelloTriangle::LoadAssets()
         UINT compileFlags = 0;
 #endif
 
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
+        // ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
+        // ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
+
+
+        std::vector<char> vert_data, frag_data;
+        vert_data = load_file("vert2.dxil");
+        frag_data = load_file("frag2.dxil");
+
+       // CComPtr<ID3DBlob> vert_blob;
+       // HRESULT hr = D3DDisassemble(vert_data.data(), vert_data.size(),
+       //     D3D_DISASM_ENABLE_DEFAULT_VALUE_PRINTS, "circle-generated shader", &vert_blob);
+    
+       // puts((const char*)vert_blob->GetBufferPointer());
+           
 
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
         {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+            { "location", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "location", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
         };
 
         // Describe and create the graphics pipeline state object (PSO).
         D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
         psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
         psoDesc.pRootSignature = m_rootSignature.Get();
-        psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
-        psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
+        psoDesc.VS = get_bytecode(vert_data);
+        psoDesc.PS = get_bytecode(frag_data);
         psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
         psoDesc.DepthStencilState.DepthEnable = FALSE;
