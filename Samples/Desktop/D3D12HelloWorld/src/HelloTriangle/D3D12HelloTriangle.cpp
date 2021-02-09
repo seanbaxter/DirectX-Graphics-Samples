@@ -51,7 +51,7 @@ void EnableShaderBasedValidation()
 
 void D3D12HelloTriangle::OnInit()
 {
-
+#if 0
     EnableShaderBasedValidation();
 
     static const UUID D3D12ExperimentalShaderModels = { /* 76f5573e-f13a-40f5-b297-81ce9e18933f */
@@ -62,8 +62,8 @@ void D3D12HelloTriangle::OnInit()
     };
 
     D3D12EnableExperimentalFeatures(1, &D3D12ExperimentalShaderModels, nullptr, nullptr);
-
-    LoadPipeline();
+#endif
+        LoadPipeline();
     LoadAssets();
 }
 
