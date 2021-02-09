@@ -14,7 +14,7 @@
 #include <atlbase.h>
 
 static std::vector<char> load_file(const char* path) {
-    FILE* f = fopen(path, "r");
+    FILE* f = fopen(path, "rb");
     if (!f) {
         printf("Could not open file %s\n", path);
         exit(1);
@@ -200,20 +200,9 @@ void D3D12HelloTriangle::LoadAssets()
         UINT compileFlags = 0;
 #endif
 
-        // ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
-        // ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
-
-
         std::vector<char> vert_data, frag_data;
         vert_data = load_file("vert2.dxil");
-        frag_data = load_file("frag2.dxil");
-
-       // CComPtr<ID3DBlob> vert_blob;
-       // HRESULT hr = D3DDisassemble(vert_data.data(), vert_data.size(),
-       //     D3D_DISASM_ENABLE_DEFAULT_VALUE_PRINTS, "circle-generated shader", &vert_blob);
-    
-       // puts((const char*)vert_blob->GetBufferPointer());
-           
+        frag_data = load_file("frag2.dxil");   
 
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
@@ -237,7 +226,9 @@ void D3D12HelloTriangle::LoadAssets()
         psoDesc.NumRenderTargets = 1;
         psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         psoDesc.SampleDesc.Count = 1;
-        ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
+
+        HRESULT hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
+        ThrowIfFailed(hr);
     }
 
     // Create the command list.
