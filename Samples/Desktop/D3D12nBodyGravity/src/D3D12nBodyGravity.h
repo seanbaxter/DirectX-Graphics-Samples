@@ -71,10 +71,14 @@ private:
         float padding[32];
     };
 
-    struct ConstantBufferCS
-    {
-        UINT param[4];
-        float paramf[4];
+    struct uniforms_t {
+        int num_particles;
+        int num_tiles;
+        float dt;
+        float damping;
+        float G;
+        float m;
+        float softening = .00125;
     };
 
     // Pipeline objects.

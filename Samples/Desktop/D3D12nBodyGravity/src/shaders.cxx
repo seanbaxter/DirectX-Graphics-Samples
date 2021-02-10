@@ -4,7 +4,8 @@ struct uniforms_t {
   int num_tiles;
   float dt;
   float damping;
-
+  float G;    // gravitational constant
+  float m;    // mass of each particle
   float softening = .00125;
 };
 
@@ -25,7 +26,7 @@ particle_t old_particles[];
 particle_t new_particles[];
 
 // Return the force on a from the influence of b.
-inline vec3 interaction(vec3 a, vec4 b) {
+inline vec3 interaction(vec3 a, vec3 b, float mass) {
   vec3 r = b.xyz - a;
 
   float softeningSq = uniforms.softening * uniforms.softening;
@@ -33,7 +34,7 @@ inline vec3 interaction(vec3 a, vec4 b) {
   float invDist = inversesqrt(dist2);
   float invDistCube = invDist * invDist * invDist;
 
-  float s = b.w * invDistCube;
+  float s = mass * invDistCube;
   return s * r;
 }
 
@@ -49,37 +50,42 @@ void integrate_shader() {
   if(gid < uniforms.num_particles)
     p0 = old_particles[gid];
 
-  vec3 pos = p0.pos.xyz;
-
   // Compute the total acceleration on pos.
+  vec3 pos = p0.pos.xyz;
+  
   vec3 acc { };
+  for(int i = 0; i < uniforms.num_particles; ++i) {
+    vec3 pos2 = old_particles[i].pos.xyz;
+    acc += interaction(pos, pos2, uniforms.m);
+  }
+  /*
   for(int tile = 0; tile < uniforms.num_tiles; ++tile) {
     // Buffer the next NT particles through shared memory.
     [[spirv::shared]] vec4 cache[NT];
     int index2 = NT * tile + tid;
-    cache[tid] = index2 < uniforms.num_particles ? 
-      old_particles[index2].pos : vec4();
-    glcomp_barrier();
+  //  cache[tid] = index2 < uniforms.num_particles ? 
+  //    old_particles[index2].pos : vec4();
+  //  glcomp_barrier();
 
     // Use @meta for to unroll all NT number of particle interactions.
-    @meta for(int j = 0; j < NT; ++j)
-      acc += interaction(pos.xyz, cache[j]);    
+    for(int j = 0; j < NT; ++j)
+      acc += interaction(pos.xyz, old_particles[]);    
 
     // Once all threads complete, go to the next tile.
-    glcomp_barrier();
-  }
+   //  glcomp_barrier();
+  }*/
 
   if(gid < uniforms.num_particles) {
     // Load the velocity for this thread.
     vec3 vel = p0.vel.xyz;
-
+ 
     // Update the velocity and position.
     // Draw the particle back to the center.
     vel += uniforms.dt * acc;
     vel *= uniforms.damping;
-
+ 
     pos += uniforms.dt * vel;
-
+ 
     // Store the updated position and velocity.
     new_particles[gid] = { vec4(pos, 0), vec4(vel, 0) };
   }

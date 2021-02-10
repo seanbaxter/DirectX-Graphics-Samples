@@ -19,6 +19,29 @@
 
 const float D3D12nBodyGravity::ParticleSpread = 400.0f;
 
+int div_up(int x, int y) {
+    return (x + y - 1) / y;
+}
+
+static std::vector<char> load_file(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        printf("Could not open file %s\n", path);
+        exit(1);
+    }
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    std::vector<char> data(len);
+    fread(data.data(), 1, len, f);
+    fclose(f);
+    return data;
+}
+
+D3D12_SHADER_BYTECODE get_bytecode(std::vector<char>& vec) {
+    return { vec.data(), vec.size() };
+}
+
 D3D12nBodyGravity::D3D12nBodyGravity(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
     m_frameIndex(0),
@@ -243,7 +266,6 @@ void D3D12nBodyGravity::LoadAssets()
         ComPtr<ID3DBlob> vertexShader;
         ComPtr<ID3DBlob> geometryShader;
         ComPtr<ID3DBlob> pixelShader;
-        ComPtr<ID3DBlob> computeShader;
 
 #if defined(_DEBUG)
         // Enable better shader debugging with the graphics debugging tools.
@@ -256,7 +278,9 @@ void D3D12nBodyGravity::LoadAssets()
         ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "VSParticleDraw", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
         ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "GSParticleDraw", "gs_5_0", compileFlags, 0, &geometryShader, nullptr));
         ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "PSParticleDraw", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"NBodyGravityCS.hlsl").c_str(), nullptr, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, nullptr));
+       // ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"NBodyGravityCS.hlsl").c_str(), nullptr, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, nullptr));
+
+        std::vector<char> compute_shader = load_file("integrate.dxil");
 
         D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
         {
@@ -298,7 +322,7 @@ void D3D12nBodyGravity::LoadAssets()
         // Describe and create the compute pipeline state object (PSO).
         D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
         computePsoDesc.pRootSignature = m_computeRootSignature.Get();
-        computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(computeShader.Get());
+        computePsoDesc.CS = get_bytecode(compute_shader);
 
         ThrowIfFailed(m_device->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&m_computeState)));
         NAME_D3D12_OBJECT(m_computeState);
@@ -319,7 +343,7 @@ void D3D12nBodyGravity::LoadAssets()
 
     // Create the compute shader's constant buffer.
     {
-        const UINT bufferSize = sizeof(ConstantBufferCS);
+        const UINT bufferSize = sizeof(uniforms_t);
 
         ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
@@ -339,14 +363,16 @@ void D3D12nBodyGravity::LoadAssets()
 
         NAME_D3D12_OBJECT(m_constantBufferCS);
 
-        ConstantBufferCS constantBufferCS = {};
-        constantBufferCS.param[0] = ParticleCount;
-        constantBufferCS.param[1] = int(ceil(ParticleCount / 128.0f));
-        constantBufferCS.paramf[0] = 0.1f;
-        constantBufferCS.paramf[1] = 1.0f;
+        uniforms_t uniforms {};
+        uniforms.num_particles = ParticleCount;
+        uniforms.num_tiles = div_up(ParticleCount, 128);
+        uniforms.dt = .01;
+        uniforms.damping = 1;
+        uniforms.G = 6.673e-11 * 10000;
+        uniforms.m = uniforms.G * 10000 * 10000;
 
         D3D12_SUBRESOURCE_DATA computeCBData = {};
-        computeCBData.pData = reinterpret_cast<UINT8*>(&constantBufferCS);
+        computeCBData.pData = reinterpret_cast<UINT8*>(&uniforms);
         computeCBData.RowPitch = bufferSize;
         computeCBData.SlicePitch = computeCBData.RowPitch;
 
