@@ -1,3 +1,18 @@
+template<int location, typename type_t>
+[[using spirv: in, location(location)]]
+type_t shader_in;
+
+template<int location, typename type_t>
+[[using spirv: out, location(location)]]
+type_t shader_out;
+
+template<int binding, typename type_t>
+[[using spirv: buffer, readonly, binding(binding)]]
+type_t StructuredBuffer[];
+
+template<int binding, typename type_t>
+[[using spirv: buffer, binding(binding)]]
+type_t RWStructuredBuffer[];
 
 struct uniforms_t {
   int num_particles;
@@ -7,6 +22,9 @@ struct uniforms_t {
   float G;    // gravitational constant
   float m;    // mass of each particle
   float softening = .00125;
+
+  mat4 worldViewProj;
+  mat4 invView;
 };
 
 // The uniform buffer is bound for integration and rendering.
@@ -16,14 +34,6 @@ uniforms_t uniforms;
 struct particle_t {
   vec4 pos, vel;
 };
-
-// t0
-[[using spirv: buffer, readonly, binding(0)]]
-particle_t old_particles[];
-
-// u0
-[[using spirv: buffer, writeonly, binding(0)]]
-particle_t new_particles[];
 
 // Return the force on a from the influence of b.
 inline vec3 interaction(vec3 a, vec3 b, float mass) {
@@ -48,7 +58,7 @@ void integrate_shader() {
   // Load the position for this thread.
   particle_t p0;
   if(gid < uniforms.num_particles)
-    p0 = old_particles[gid];
+    p0 = StructuredBuffer<0, particle_t>[gid];
 
   // Compute the total acceleration on pos.
   vec3 pos = p0.pos.xyz;
@@ -57,11 +67,11 @@ void integrate_shader() {
     [[spirv::shared]] vec4 cache[NT];
     int index2 = NT * tile + tid;
     cache[tid] = index2 < uniforms.num_particles ? 
-      old_particles[index2].pos : vec4();
+      StructuredBuffer<0, particle_t>[index2].pos : vec4();
     glcomp_barrier();
 
     // Use @meta for to unroll all NT number of particle interactions.
-    for(int j = 0; j < NT; ++j)
+    @meta for(int j = 0; j < NT; ++j)
       acc += interaction(pos.xyz, cache[tid].xyz, uniforms.m);    
 
      glcomp_barrier();
@@ -79,6 +89,66 @@ void integrate_shader() {
     pos += uniforms.dt * vel;
  
     // Store the updated position and velocity.
-    new_particles[gid] = { vec4(pos, 0), vec4(vel, 0) };
+    RWStructuredBuffer<0, particle_t>[gid] = { vec4(pos, 0), vec4(vel, 0) };
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+extern "C" [[spirv::vert]]
+void vert() {
+  // Write the buffer object's particle position.
+  particle_t particle = StructuredBuffer<0, particle_t>[glvert_VertexIndex];
+  glvert_Output.Position = particle.pos;
+
+  vec4 color = shader_in<0, vec4>;
+  float mag = particle.vel.w / 9;
+
+  // Interpolation between red and the input color using the magnitude.
+  shader_out<0, vec4> = mix(vec4(1, .1, .1, 1), color, mag);
+}
+
+extern "C" [[spirv::geom(points, triangle_strip, 4)]]
+void geom() {
+
+  static constexpr vec3 corners[] {
+    -1,  1, 0,
+     1,  1, 0,
+    -1, -1, 0,
+     1, -1, 0
+  };
+  static constexpr vec2 uv[] {
+    0, 0, 
+    1, 0,
+    0, 1,
+    1, 1
+  };
+  float radius = 10;
+
+  vec3 center = glgeom_Input[0].Position.xyz;
+
+  @meta for(int i = 0; i < 4; ++i) {{
+    // Write a billboard corner.
+    vec3 pos = center + (mat3)uniforms.invView * (radius * corners[i]);
+    glgeom_Output.Position = vec4(pos, 1);
+
+    // Write uv and pass-through color.
+    shader_out<0, vec2> = uv[i];
+    shader_out<1, vec4> = shader_in<0, vec4>;
+
+    glgeom_EmitVertex();
+  }}
+
+  glgeom_EndPrimitive();
+}
+
+extern "C" [[spirv::frag]]
+void frag() {
+  vec2 uv = shader_in<0, vec2>;
+  vec4 color = shader_in<1, vec4>;
+
+  float intensity = .5f - length(vec2(.5) - uv);
+  intensity = 2 * clamp(intensity, 0.f, .5f);
+  shader_out<0, vec4> = vec4(color.xyz, intensity);
 }
