@@ -79,6 +79,7 @@ private:
         float G;
         float m;
         float softening = .00125;
+        float padding;
     };
 
     // Pipeline objects.

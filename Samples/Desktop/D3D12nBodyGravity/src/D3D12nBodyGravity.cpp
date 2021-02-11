@@ -278,13 +278,15 @@ void D3D12nBodyGravity::LoadAssets()
         ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "VSParticleDraw", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
         ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "GSParticleDraw", "gs_5_0", compileFlags, 0, &geometryShader, nullptr));
         ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "PSParticleDraw", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
-       // ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"NBodyGravityCS.hlsl").c_str(), nullptr, nullptr, "CSMain", "cs_5_0", compileFlags, 0, &computeShader, nullptr));
 
         std::vector<char> compute_shader = load_file("integrate.dxil");
+        std::vector<char> vert_data = load_file("vert.dxil");
+        std::vector<char> geom_data = load_file("geom.dxil");
+        std::vector<char> frag_data = load_file("frag.dxil");
 
         D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
         {
-            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { }// "location", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
         // Describe the blend and depth states.
@@ -301,11 +303,19 @@ void D3D12nBodyGravity::LoadAssets()
 
         // Describe and create the graphics pipeline state object (PSO).
         D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-        psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
+        psoDesc.InputLayout = { inputElementDescs, 0 };
         psoDesc.pRootSignature = m_rootSignature.Get();
+        
+        
+        psoDesc.VS = get_bytecode(vert_data);
+        psoDesc.GS = get_bytecode(geom_data);
+        psoDesc.PS = get_bytecode(frag_data);
+        
+        /*
         psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
         psoDesc.GS = CD3DX12_SHADER_BYTECODE(geometryShader.Get());
         psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
+        */
         psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         psoDesc.BlendState = blendDesc;
         psoDesc.DepthStencilState = depthStencilDesc;
@@ -326,6 +336,7 @@ void D3D12nBodyGravity::LoadAssets()
 
         ThrowIfFailed(m_device->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&m_computeState)));
         NAME_D3D12_OBJECT(m_computeState);
+
     }
 
     // Create the command list.

@@ -22,9 +22,7 @@ struct uniforms_t {
   float G;    // gravitational constant
   float m;    // mass of each particle
   float softening = .00125;
-
-  mat4 worldViewProj;
-  mat4 invView;
+  float padding;
 };
 
 // The uniform buffer is bound for integration and rendering.
@@ -100,14 +98,16 @@ extern "C" [[spirv::vert]]
 void vert() {
   // Write the buffer object's particle position.
   particle_t particle = StructuredBuffer<0, particle_t>[glvert_VertexIndex];
-  glvert_Output.Position = particle.pos;
-
-  vec4 color = shader_in<0, vec4>;
-  float mag = particle.vel.w / 9;
-
-  // Interpolation between red and the input color using the magnitude.
-  shader_out<0, vec4> = mix(vec4(1, .1, .1, 1), color, mag);
+  shader_out<0, vec4> = particle.pos;
+  // glvert_Output.Position = particle.pos;
 }
+
+struct gs_uniforms_t {
+  mat4 worldViewProj;
+  mat4 invView;
+};
+[[using spirv: uniform, binding(0)]]
+gs_uniforms_t gs_uniforms;
 
 extern "C" [[spirv::geom(points, triangle_strip, 4)]]
 void geom() {
@@ -126,16 +126,13 @@ void geom() {
   };
   float radius = 10;
 
-  vec3 center = glgeom_Input[0].Position.xyz;
+  // vec3 center = glgeom_Input[0].Position.xyz;
+  vec3 center = shader_in<0, vec4[1]>[0].xyz;
 
   @meta for(int i = 0; i < 4; ++i) {{
     // Write a billboard corner.
-    vec3 pos = center + (mat3)uniforms.invView * (radius * corners[i]);
-    glgeom_Output.Position = vec4(pos, 1);
-
-    // Write uv and pass-through color.
-    shader_out<0, vec2> = uv[i];
-    shader_out<1, vec4> = shader_in<0, vec4>;
+    vec3 pos = center + (mat3)gs_uniforms.invView * (radius * corners[i]);
+    glgeom_Output.Position = gs_uniforms.worldViewProj * vec4(pos, 1);
 
     glgeom_EmitVertex();
   }}
@@ -145,10 +142,5 @@ void geom() {
 
 extern "C" [[spirv::frag]]
 void frag() {
-  vec2 uv = shader_in<0, vec2>;
-  vec4 color = shader_in<1, vec4>;
-
-  float intensity = .5f - length(vec2(.5) - uv);
-  intensity = 2 * clamp(intensity, 0.f, .5f);
-  shader_out<0, vec4> = vec4(color.xyz, intensity);
+  shader_out<0, vec4> = vec4(1, 0, 0, 1);
 }
