@@ -263,30 +263,23 @@ void D3D12nBodyGravity::LoadAssets()
 
     // Create the pipeline states, which includes compiling and loading shaders.
     {
-        ComPtr<ID3DBlob> vertexShader;
-        ComPtr<ID3DBlob> geometryShader;
-        ComPtr<ID3DBlob> pixelShader;
-
-#if defined(_DEBUG)
-        // Enable better shader debugging with the graphics debugging tools.
-        UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-        UINT compileFlags = 0;
-#endif
-
-        // Load and compile shaders.
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "VSParticleDraw", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "GSParticleDraw", "gs_5_0", compileFlags, 0, &geometryShader, nullptr));
-        ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"ParticleDraw.hlsl").c_str(), nullptr, nullptr, "PSParticleDraw", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
-
+        // Load shader binaries.
         std::vector<char> compute_shader = load_file("integrate.dxil");
         std::vector<char> vert_data = load_file("vert.dxil");
         std::vector<char> geom_data = load_file("geom.dxil");
         std::vector<char> frag_data = load_file("frag.dxil");
 
+        // Describe and create the compute pipeline state object (PSO).
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = m_computeRootSignature.Get();
+        computePsoDesc.CS = get_bytecode(compute_shader);
+
+        ThrowIfFailed(m_device->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&m_computeState)));
+        NAME_D3D12_OBJECT(m_computeState);
+
         D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
         {
-            { }// "location", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "location", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
         // Describe the blend and depth states.
@@ -303,19 +296,13 @@ void D3D12nBodyGravity::LoadAssets()
 
         // Describe and create the graphics pipeline state object (PSO).
         D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-        psoDesc.InputLayout = { inputElementDescs, 0 };
+        psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
         psoDesc.pRootSignature = m_rootSignature.Get();
-        
-        
+              
         psoDesc.VS = get_bytecode(vert_data);
         psoDesc.GS = get_bytecode(geom_data);
         psoDesc.PS = get_bytecode(frag_data);
-        
-        /*
-        psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
-        psoDesc.GS = CD3DX12_SHADER_BYTECODE(geometryShader.Get());
-        psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
-        */
+  
         psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
         psoDesc.BlendState = blendDesc;
         psoDesc.DepthStencilState = depthStencilDesc;
@@ -328,14 +315,6 @@ void D3D12nBodyGravity::LoadAssets()
 
         ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
         NAME_D3D12_OBJECT(m_pipelineState);
-
-        // Describe and create the compute pipeline state object (PSO).
-        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
-        computePsoDesc.pRootSignature = m_computeRootSignature.Get();
-        computePsoDesc.CS = get_bytecode(compute_shader);
-
-        ThrowIfFailed(m_device->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&m_computeState)));
-        NAME_D3D12_OBJECT(m_computeState);
 
     }
 

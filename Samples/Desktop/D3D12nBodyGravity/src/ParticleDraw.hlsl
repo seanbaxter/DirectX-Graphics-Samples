@@ -11,21 +11,27 @@
 
 struct VSParticleIn
 {
+    float4 color    : location;
     uint id            : SV_VERTEXID;
 };
 
 struct VSParticleDrawOut
 {
+    float4 color        : COLOR;
     float3 pos            : POS;
 };
 
 struct GSParticleDrawOut
 {
+    float2 tex            : TEXCOORD0;
+    float4 color        : COLOR;
     float4 pos            : SV_POSITION;
 };
 
 struct PSParticleDrawIn
 {
+    float2 tex            : TEXCOORD0;
+    float4 color        : COLOR;
 };
 
 struct PosVelo
@@ -75,6 +81,9 @@ VSParticleDrawOut VSParticleDraw(VSParticleIn input)
     
     output.pos = g_bufPosVelo[input.id].pos.xyz;
     
+    float mag = g_bufPosVelo[input.id].velo.w / 9;
+    output.color = lerp(float4(1.0f, 0.1f, 0.1f, 1.0f), input.color, mag);
+    
     return output;
 }
 
@@ -94,6 +103,8 @@ void GSParticleDraw(point VSParticleDrawOut input[1], inout TriangleStream<GSPar
         position = mul(position, (float3x3)g_mInvView) + input[0].pos;
         output.pos = mul(float4(position,1.0), g_mWorldViewProj);
 
+        output.color = input[0].color;
+        output.tex = g_texcoords[i];
         SpriteStream.Append(output);
     }
     SpriteStream.RestartStrip();
@@ -105,5 +116,7 @@ void GSParticleDraw(point VSParticleDrawOut input[1], inout TriangleStream<GSPar
 //
 float4 PSParticleDraw(PSParticleDrawIn input) : SV_Target
 {
-    return float4(1, 0, 0, 1);
+    float intensity = 0.5f - length(float2(0.5f, 0.5f) - input.tex);
+    intensity = clamp(intensity, 0.0f, 0.5f) * 2.0f;
+    return float4(input.color.xyz, intensity);
 }
