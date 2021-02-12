@@ -78,6 +78,10 @@ private:
     ComPtr<ID3D12Fence> m_fence;
     UINT64 m_fenceValue;
 
+    LARGE_INTEGER clock_begin;
+    LARGE_INTEGER clock_frequency;
+    float elapsed;    // Elapsed simulation time. May run at a different rate than the sysetm clock.
+
     void LoadPipeline();
     void LoadAssets();
     void PopulateCommandList();

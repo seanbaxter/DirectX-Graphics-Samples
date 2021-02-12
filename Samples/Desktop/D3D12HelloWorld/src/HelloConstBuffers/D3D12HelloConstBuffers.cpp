@@ -46,6 +46,10 @@ void D3D12HelloConstBuffers::OnInit()
 {
     LoadPipeline();
     LoadAssets();
+
+    QueryPerformanceCounter(&clock_begin);
+    QueryPerformanceFrequency(&clock_frequency);
+    elapsed = 0;
 }
 
 // Load the rendering pipeline dependencies.
@@ -183,7 +187,7 @@ void D3D12HelloConstBuffers::LoadAssets()
         CD3DX12_ROOT_PARAMETER1 rootParameters[1];
 
         ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-        rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_VERTEX);
+        rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_PIXEL);
 
         // Allow input layout and deny uneccessary access to certain pipeline stages.
         D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags =
@@ -191,7 +195,7 @@ void D3D12HelloConstBuffers::LoadAssets()
             D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
             D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
             D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
-            D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
+            D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS;
 
         CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
         rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr, rootSignatureFlags);
@@ -322,13 +326,46 @@ void D3D12HelloConstBuffers::OnUpdate()
     const float translationSpeed = 0.005f;
     const float offsetBounds = 1.25f;
        
-    m_constantBufferData.mouse[0] = .5;
-    m_constantBufferData.mouse[1] = .5;
-    m_constantBufferData.mouse[2] = .5;
-    m_constantBufferData.mouse[3] = .5;
-    m_constantBufferData.resolution[0] = m_viewport.Width;
-    m_constantBufferData.resolution[1] = m_viewport.Height;
-    m_constantBufferData.time = 0;
+    auto& u = m_constantBufferData;
+    u.mouse[0] = .5;
+    u.mouse[1] = .5;
+    u.mouse[2] = .5;
+    u.mouse[3] = .5;
+
+    if (GetKeyState(VK_LBUTTON) & 0x8000) {
+      // Update mouse constant if pressed.
+      POINT pt;
+      GetCursorPos(&pt);
+      ScreenToClient(Win32Application::GetHwnd(), &pt);
+
+      double x = pt.x + .5;
+      double y = pt.y + .5;
+
+      u.mouse[0] = x;
+      u.mouse[1] = y;
+      if (u.mouse[2] < 0) {
+        // The button was up the previous frame.
+        u.mouse[2] = x;
+        u.mouse[3] = y;
+      }
+    } else if (u.mouse[2] >= 0) {
+      // The button was down the previous frame.
+      // uniforms.mouse.zw *= -uniforms.mouse.xy;
+      
+      u.mouse[2] = -u.mouse[0];
+      u.mouse[3] = -u.mouse[1];
+    }
+
+    u.resolution[0] = m_viewport.Width;
+    u.resolution[1] = m_viewport.Height;
+
+    LARGE_INTEGER clock_now;
+    QueryPerformanceCounter(&clock_now);
+
+    elapsed = (clock_now.QuadPart - clock_begin.QuadPart) / 
+      (double)clock_frequency.QuadPart;
+
+    m_constantBufferData.time = elapsed;
 
     memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 }
