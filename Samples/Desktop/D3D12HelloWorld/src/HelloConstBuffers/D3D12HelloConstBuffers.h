@@ -37,16 +37,18 @@ private:
 
     struct Vertex
     {
-        XMFLOAT3 position;
-        XMFLOAT4 color;
+      float x, y;
     };
 
-    struct SceneConstantBuffer
+    struct alignas(256) SceneConstantBuffer
     {
-        XMFLOAT4 offset;
-        float padding[60]; // Padding so the constant buffer is 256-byte aligned.
+      // shader-specific parameters.
+      float mouse[4];        // .xy is current or last drag position.
+                             // .zw is current or last click.
+                             // .zw is negative if mouse button is up.
+      float resolution[2];   // width and height of viewport in pixels.
+      float time;            // seconds since simulation started.
     };
-    static_assert((sizeof(SceneConstantBuffer) % 256) == 0, "Constant Buffer size must be 256-byte aligned");
 
     // Pipeline objects.
     CD3DX12_VIEWPORT m_viewport;

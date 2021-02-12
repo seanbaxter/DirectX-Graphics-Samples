@@ -211,8 +211,7 @@ void D3D12HelloConstBuffers::LoadAssets()
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
         {
-            { "location", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "location", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+            { "location", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
         // Describe and create the graphics pipeline state object (PSO).
@@ -244,14 +243,9 @@ void D3D12HelloConstBuffers::LoadAssets()
     // Create the vertex buffer.
     {
         // Define the geometry for a triangle.
-        Vertex triangleVertices[] =
-        {
-            { { 0.0f, 0.25f * m_aspectRatio, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-            { { 0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-            { { -0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
+        Vertex quadVertices[4] {
+          { -1, 1 }, { 1, 1 }, { -1, -1 }, { 1, -1 }
         };
-
-        const UINT vertexBufferSize = sizeof(triangleVertices);
 
         // Note: using upload heaps to transfer static data like vert buffers is not 
         // recommended. Every time the GPU needs it, the upload heap will be marshalled 
@@ -260,7 +254,7 @@ void D3D12HelloConstBuffers::LoadAssets()
         ThrowIfFailed(m_device->CreateCommittedResource(
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
             D3D12_HEAP_FLAG_NONE,
-            &CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
+            &CD3DX12_RESOURCE_DESC::Buffer(sizeof(quadVertices)),
             D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr,
             IID_PPV_ARGS(&m_vertexBuffer)));
@@ -269,13 +263,13 @@ void D3D12HelloConstBuffers::LoadAssets()
         UINT8* pVertexDataBegin;
         CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
         ThrowIfFailed(m_vertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
-        memcpy(pVertexDataBegin, triangleVertices, sizeof(triangleVertices));
+        memcpy(pVertexDataBegin, quadVertices, sizeof(quadVertices));
         m_vertexBuffer->Unmap(0, nullptr);
 
         // Initialize the vertex buffer view.
         m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
         m_vertexBufferView.StrideInBytes = sizeof(Vertex);
-        m_vertexBufferView.SizeInBytes = vertexBufferSize;
+        m_vertexBufferView.SizeInBytes = sizeof(quadVertices);
     }
 
     // Create the constant buffer.
@@ -327,12 +321,15 @@ void D3D12HelloConstBuffers::OnUpdate()
 {
     const float translationSpeed = 0.005f;
     const float offsetBounds = 1.25f;
+       
+    m_constantBufferData.mouse[0] = .5;
+    m_constantBufferData.mouse[1] = .5;
+    m_constantBufferData.mouse[2] = .5;
+    m_constantBufferData.mouse[3] = .5;
+    m_constantBufferData.resolution[0] = m_viewport.Width;
+    m_constantBufferData.resolution[1] = m_viewport.Height;
+    m_constantBufferData.time = 0;
 
-    m_constantBufferData.offset.x += translationSpeed;
-    if (m_constantBufferData.offset.x > offsetBounds)
-    {
-        m_constantBufferData.offset.x = -offsetBounds;
-    }
     memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 }
 
@@ -393,9 +390,9 @@ void D3D12HelloConstBuffers::PopulateCommandList()
     // Record commands.
     const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
     m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-    m_commandList->DrawInstanced(3, 1, 0, 0);
+    m_commandList->DrawInstanced(4, 1, 0, 0);
 
     // Indicate that the back buffer will now be used to present.
     m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
