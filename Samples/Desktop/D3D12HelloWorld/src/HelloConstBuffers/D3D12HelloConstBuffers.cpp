@@ -31,6 +31,25 @@ D3D12_SHADER_BYTECODE get_bytecode(std::vector<char>& vec) {
     return { vec.data(), vec.size() };
 }
 
+const char* vert_shader_file = "vert.dxil";
+
+const char* frag_shader_files[]{
+  "devil.dxil",
+  "square.dxil",
+  "modulation.dxil",
+  "bands.dxil",
+  "paint.dxil",
+  "menger.dxil",
+  "hypercomplex.dxil",
+  "band1.dxil",
+  "band2.dxil",
+  "sphere.dxil",
+  "segment.dxil",
+  "comparison.dxil",
+  "raymarch.dxil",
+};
+const int NumShaders = sizeof(frag_shader_files) / sizeof(*frag_shader_files);
+
 D3D12HelloConstBuffers::D3D12HelloConstBuffers(UINT width, UINT height, std::wstring name) :
     DXSample(width, height, name),
     m_frameIndex(0),
@@ -213,10 +232,10 @@ void D3D12HelloConstBuffers::LoadAssets()
     }
 
     // Create the pipeline state, which includes compiling and loading shaders.
-    {
-        std::vector<char> vert_data, frag_data;
-        vert_data = load_file("vert.dxil");
-        frag_data = load_file("frag.dxil");
+    m_pipelineStates.resize(NumShaders);
+    std::vector<char> vert_data = load_file(vert_shader_file);
+    for(int i = 0; i < NumShaders; ++i) {
+        std::vector<char> frag_data = load_file(frag_shader_files[i]);
 
         // Define the vertex input layout.
         D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
@@ -240,11 +259,11 @@ void D3D12HelloConstBuffers::LoadAssets()
         psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
         psoDesc.SampleDesc.Count = 1;
 
-        ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
+        ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineStates[i])));
     }
 
     // Create the command list.
-    ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), m_pipelineState.Get(), IID_PPV_ARGS(&m_commandList)));
+    ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_commandList)));
 
     // Command lists are created in the recording state, but there is nothing
     // to record yet. The main loop expects it to be closed, so close it now.
@@ -393,6 +412,21 @@ void D3D12HelloConstBuffers::OnDestroy()
     CloseHandle(m_fenceEvent);
 }
 
+void D3D12HelloConstBuffers::OnKeyDown(UINT8 key) {
+  switch (key) {
+    case VK_PRIOR:  // Page Up
+      cur_shader = (cur_shader + 1) % NumShaders;
+      break;
+
+    case VK_NEXT:   // Page Down
+      cur_shader = (cur_shader + NumShaders - 1) % NumShaders;
+      break;
+
+    default:
+      break;
+  }
+}
+
 // Fill the command list with all the render commands and dependent state.
 void D3D12HelloConstBuffers::PopulateCommandList()
 {
@@ -404,7 +438,9 @@ void D3D12HelloConstBuffers::PopulateCommandList()
     // However, when ExecuteCommandList() is called on a particular command 
     // list, that command list can then be reset at any time and must be before 
     // re-recording.
-    ThrowIfFailed(m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get()));
+    ThrowIfFailed(m_commandList->Reset(m_commandAllocator.Get(), nullptr));
+
+    m_commandList->SetPipelineState(m_pipelineStates[cur_shader].Get());
 
     // Set necessary state.
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());

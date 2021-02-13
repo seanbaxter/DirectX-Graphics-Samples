@@ -31,6 +31,7 @@ public:
     virtual void OnUpdate();
     virtual void OnRender();
     virtual void OnDestroy();
+    virtual void OnKeyDown(UINT8 key);
 
 private:
     static const UINT FrameCount = 2;
@@ -61,7 +62,7 @@ private:
     ComPtr<ID3D12RootSignature> m_rootSignature;
     ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
     ComPtr<ID3D12DescriptorHeap> m_cbvHeap;
-    ComPtr<ID3D12PipelineState> m_pipelineState;
+    std::vector<ComPtr<ID3D12PipelineState> > m_pipelineStates;
     ComPtr<ID3D12GraphicsCommandList> m_commandList;
     UINT m_rtvDescriptorSize;
 
@@ -80,7 +81,8 @@ private:
 
     LARGE_INTEGER clock_begin;
     LARGE_INTEGER clock_frequency;
-    float elapsed;    // Elapsed simulation time. May run at a different rate than the sysetm clock.
+    float elapsed;    // Elapsed simulation time. May run at a different rate than the system clock.
+    int cur_shader = 0;
 
     void LoadPipeline();
     void LoadAssets();
