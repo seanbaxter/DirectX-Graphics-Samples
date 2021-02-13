@@ -1015,6 +1015,297 @@ struct [[
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+// Ray march algorithms
+
+struct trace_result_t {
+  bool hit;
+  int steps;
+  float t;
+};
+
+struct sphere_tracer_t {
+  template<typename scene_t>
+  trace_result_t trace(const scene_t& scene, vec3 o, vec3 dir, float ra, 
+    float rb, int max_steps) {
+
+    float t = ra;
+    int i = 0;
+    bool hit = false;
+    float k = scene.KGlobal();
+
+    while(i < max_steps) {
+      ++i;
+
+      vec3 p = o + t * dir;
+      float v = scene.Object(p);
+
+      if(v > 0) {
+        // Hit.
+        hit = true;
+        break;
+      }
+
+      // Move along ray.
+      t += max(epsilon, abs(v) / k);
+
+      // Break if ray has escaped.
+      if(t > rb)
+        break;
+    }
+
+    return { hit, i, t  };
+  }
+
+  [[.imgui::range_float {0, .3 }]] float epsilon = .1;
+};
+
+struct segment_tracer_t {
+  template<typename scene_t>
+  trace_result_t trace(const scene_t& scene, vec3 o, vec3 dir, float ra,
+    float rb, int max_steps) {
+
+    float t = ra;
+    bool hit = false;
+    float candidate = 1;
+
+    int i = 0;
+    while(i < max_steps) {
+      ++i;
+
+      vec3 p = o + t * dir;
+      float v = scene.Object(p);
+
+      if(v > 0) {
+        // Hit.
+        hit = true;
+        break;
+      }
+
+      // Lipschitz constant on a segment.
+      float lipschitzSeg = scene.KSegment(p, o + (t + candidate) * dir);
+
+      // Lipschitz marching distance.
+      float step = abs(v) / lipschitzSeg;
+
+      // No further than the segment length.
+      step = min(step, candidate);
+
+      // But at least, Epsilon.
+      step = max(epsilon, step);
+
+      // Move along ray.
+      t += step;
+
+      // Escape marched far away.
+      if(t > rb)
+        break;
+
+      candidate = kappa * step;
+    }
+
+    return { hit, i, t };
+  }
+
+  [[.imgui::range_float { 0, .3 }]] float epsilon = .1;
+  [[.imgui::range_float { 0, 5 }]] float kappa = 2.0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Scene distance fields
+
+struct blobs_t {
+
+  float Falloff(float x, float R) const {
+    float xx = clamp(x / R, 0.f, 1.f);
+    float y = 1 - xx * xx;
+    return y * y * y;
+  }
+
+  float Vertex(vec3 p, vec3 c, float R, float e) const {
+    return e * Falloff(length(p - c), R);
+  }
+
+  float Object(vec3 p) const {
+    float I = 0;
+    I += Vertex(p, vec3(-radius / 2,      0, 0), radius, 1);
+    I += Vertex(p, vec3( radius / 2,      0, 0), radius, 1);
+    I += Vertex(p, vec3( radius / 3, radius, 0), radius, 1);
+    return I - T;
+  }
+
+  float FalloffK(float e, float R) const {
+    return e * 1.72f * abs(e) / R;
+  }
+
+  float FalloffK(float a, float b, float R, float e) const {
+    float x = 0;
+    if(a <= R) {
+      // There's a Circle SPIR-V codegen bug preventing this from being 
+      // written with multiple return statements. Am investigating.
+
+      if(b < R / 5) {
+        float t = 1 - b / R;
+        x = 6 * abs(e) * (sqrt(b) / R) * (t * t);
+
+      } else if(a > (R * R) / 5) {
+        float t = 1 - a / R;
+        x = 6 * abs(e) * (sqrt(a) / R) * (t * t);
+
+      } else {
+        x = FalloffK(e, R);
+      }
+    }
+
+    return x;
+  }
+
+  float VertexKSegment(vec3 c, float R, float e, vec3 a, vec3 b) const {
+    vec3 axis = normalize(b - a);
+    float l = dot(c - a, axis);
+    float kk = 0;
+
+    if(l < 0) {
+      kk = FalloffK(length(c - a), length(c - b), R, e);
+
+    } else if(length(b - a) < l) {
+      kk = FalloffK(length(c - b), length(c - a), R, e);
+
+    } else {
+      float dd = length(c - a) - l * l;
+      vec3 pc = a + axis * l;
+      kk = FalloffK(dd, max(length(c - b), length(c - a)), R, e);
+    }
+
+    float grad = max(
+      abs(dot(axis, normalize(c - a))), 
+      abs(dot(axis, normalize(c - b)))
+    );
+
+    return kk * grad;
+  }
+
+  float KSegment(vec3 a, vec3 b) const {
+    float K = 0;
+    K += VertexKSegment(vec3(-radius / 2,      0, 0), radius, 1, a, b);
+    K += VertexKSegment(vec3( radius / 2,      0, 0), radius, 1, a, b);
+    K += VertexKSegment(vec3( radius / 3, radius, 0), radius, 1, a, b);
+    return K;
+  }
+
+  float KGlobal() const {
+    return FalloffK(1, radius) * 3;
+  }
+
+  vec3 ObjectNormal(vec3 p) const {
+    vec2 e(0, .001);
+    float v = Object(p);
+    vec3 n(
+      Object(p + e.yxx) - v,
+      Object(p + e.xyx) - v,
+      Object(p + e.xxy) - v
+    );
+    return normalize(n);
+  }
+
+  [[.imgui::range_float {1, 20 }]] float radius = 8; // Distance between blobs.
+  [[.imgui::range_float {0,  1 }]] float T = .5;     // Surface epsilon. 
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template<const char title[], typename tracer_t, typename scene_t>
+struct [[
+  .imgui::title=title,
+  .imgui::url="https://www.shadertoy.com/view/WdVyDW"
+]] tracer_engine_t {
+
+  vec3 RotateY(vec3 p, float a) {
+    float sa = sin(a);
+    float ca = cos(a);
+    return vec3(ca * p.x + sa * p.z, p.y, -sa * p.x + ca * p.z);    
+  }
+
+  vec3 Background(vec3 rd) {
+    return mix(BackgroundColor1, BackgroundColor2, rd.y + .25);
+  }
+
+  vec3 Shade(vec3 p, vec3 n) {
+    vec3 l1 = normalize(vec3(-2, -1, -1));
+    vec3 l2 = normalize(vec3(2, 0, 1));
+    float d1 = pow(.5f * (1 + dot(n, l1)), 2.f);
+    float d2 = pow(.5f * (1 + dot(n, l2)), 2.f);
+    return vec3(.6) + .2f * (d1 + d2) * Background(n);
+  }
+
+  vec3 ShadeSteps(int n) {
+    float t = (float)n / MaxSteps;
+    return t < .5f ? 
+      mix(ShadeColor1, ShadeColor2, 2 * t) :
+      mix(ShadeColor2, ShadeColor3, 2 * t - 1);
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    vec2 pixel = 2 * (frag_coord / u.resolution) - 1;
+    vec2 mouse = 2 * (u.mouse.xy / u.resolution.xy) - 1;
+
+    float asp = u.resolution.x / u.resolution.y;
+    vec3 rd = normalize(vec3(asp * pixel.x, pixel.y - 1.5f, -4.f));
+    vec3 ro(0, 18, 40);
+
+    float a = .25f * u.time;
+    ro = RotateY(ro, a);
+    rd = RotateY(rd, a);
+
+    // Shade this object.
+    vec3 color = Background(rd);
+
+    trace_result_t result { };
+
+    constexpr bool is_dual = @is_class_template(tracer_t, std::pair);
+    if constexpr(is_dual)
+      result = (pixel.x < mouse.x) ?
+        tracer.first.trace(scene, ro, rd, 20, 60, MaxSteps) :
+        tracer.second.trace(scene, ro, rd, 20, 60, MaxSteps);
+    else
+      result = tracer.trace(scene, ro, rd, 20, 60, MaxSteps);
+
+    // Render the window.
+    if(pixel.y > mouse.y) {
+      if(result.hit) {
+        vec3 pos = ro + result.t * rd;
+        vec3 n = scene.ObjectNormal(pos);
+        color = Shade(pos, n);
+      }
+
+    } else
+      color = ShadeSteps(result.steps);
+
+    // Draw a horizontal line to mark the render vs the step count.
+    color *= smoothstep(1.f, 2.f, abs(pixel.y - mouse.y) / (2 / u.resolution.y));
+
+    // Draw a vertical line to mark the sphere vs segment tracer.
+    if constexpr(is_dual)
+      color *= smoothstep(1.f, 2.f, abs(pixel.x - mouse.x) / (2 / u.resolution.x));
+
+    return vec4(color, 1);
+  }
+
+  [[.imgui::range_int {1, 300 }]] int MaxSteps = 150;
+
+  tracer_t tracer;
+  scene_t scene;
+
+  [[.imgui::color3]] vec3 BackgroundColor1 = vec3(.8, .8, .9);
+  [[.imgui::color3]] vec3 BackgroundColor2 = vec3(.6, .8, 1.0);
+
+  [[.imgui::color3]] vec3 ShadeColor1 = vec3(97, 130, 234) / 255;
+  [[.imgui::color3]] vec3 ShadeColor2 = vec3(221, 220, 219) / 255;
+  [[.imgui::color3]] vec3 ShadeColor3 = vec3(220, 94, 75) / 255;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
 
 // The MIT License
 // Copyright © 2013 Inigo Quilez
@@ -1733,19 +2024,19 @@ struct [[
   capped_cone2_t  capped_cone2  = { vec3( 2, 0.10, -1), vec3(.1, 0, 0), vec3(-.2, .4, .1), .15f, .05f };
   round_cone_t    round_cone    = { vec3( 2, 0.15,  1), .2f, .1f, .3f };
   round_cone2_t   round_cone2   = { vec3( 2, 0.15,  0), vec3(.1, 0, 0), vec3(-.1, .35, .1), .15f, .05f };
-
 };
 
 
-
-// template void frag_shader<devil_egg_t>() asm("frag");
-// template void frag_shader<keep_up_square_t>() asm("frag");
-// template void frag_shader<paint_t>() asm("frag");
-// template void frag_shader<modulation_t>() asm("frag");
-// template void frag_shader<hypno_bands_t>() asm("frag");
-// template void frag_shader<menger_journey_t>() asm("frag");
-// template void frag_shader<hypercomplex_t>() asm("frag");
-// template void frag_shader<band_limited1_t>() asm("frag");
-// template void frag_shader<band_limited2_t>() asm("frag");
-
-template void frag_shader<raymarch_prims_t>() asm("frag");
+template void frag_shader<devil_egg_t>() asm("devil");
+template void frag_shader<keep_up_square_t>() asm("square");
+template void frag_shader<modulation_t>() asm("modulation");
+template void frag_shader<hypno_bands_t>() asm("bands");
+template void frag_shader<paint_t>() asm("paint");
+template void frag_shader<menger_journey_t>() asm("menger");
+template void frag_shader<hypercomplex_t>() asm("hypercomplex");
+template void frag_shader<band_limited1_t>() asm("band1");
+template void frag_shader<band_limited2_t>() asm("band2");
+template void frag_shader<tracer_engine_t<"sphere tracer", sphere_tracer_t, blobs_t>>() asm("sphere");
+template void frag_shader<tracer_engine_t<"segment tracer", segment_tracer_t, blobs_t>>() asm("segment");
+template void frag_shader<tracer_engine_t<"comparison", std::pair<sphere_tracer_t, segment_tracer_t>, blobs_t>>() asm("comparison");
+template void frag_shader<raymarch_prims_t>() asm("raymarch");

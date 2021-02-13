@@ -44,6 +44,12 @@ D3D12HelloConstBuffers::D3D12HelloConstBuffers(UINT width, UINT height, std::wst
 
 void D3D12HelloConstBuffers::OnInit()
 {
+    auto& u = m_constantBufferData;
+    u.mouse[0] = u.mouse[1] = u.mouse[2] = u.mouse[3] = .5f;
+    u.resolution[0] = m_viewport.Width;
+    u.resolution[1] = m_viewport.Height;
+    u.time = 0;
+
     LoadPipeline();
     LoadAssets();
 
@@ -327,12 +333,7 @@ void D3D12HelloConstBuffers::OnUpdate()
     const float offsetBounds = 1.25f;
        
     auto& u = m_constantBufferData;
-    u.mouse[0] = .5;
-    u.mouse[1] = .5;
-    u.mouse[2] = .5;
-    u.mouse[3] = .5;
-
-    if (GetKeyState(VK_LBUTTON) & 0x8000) {
+    if (GetKeyState(VK_LBUTTON) < 0) {
       // Update mouse constant if pressed.
       POINT pt;
       GetCursorPos(&pt);
@@ -340,6 +341,7 @@ void D3D12HelloConstBuffers::OnUpdate()
 
       double x = pt.x + .5;
       double y = pt.y + .5;
+      y = m_viewport.Height - y;
 
       u.mouse[0] = x;
       u.mouse[1] = y;
@@ -351,13 +353,9 @@ void D3D12HelloConstBuffers::OnUpdate()
     } else if (u.mouse[2] >= 0) {
       // The button was down the previous frame.
       // uniforms.mouse.zw *= -uniforms.mouse.xy;
-      
       u.mouse[2] = -u.mouse[0];
       u.mouse[3] = -u.mouse[1];
     }
-
-    u.resolution[0] = m_viewport.Width;
-    u.resolution[1] = m_viewport.Height;
 
     LARGE_INTEGER clock_now;
     QueryPerformanceCounter(&clock_now);
