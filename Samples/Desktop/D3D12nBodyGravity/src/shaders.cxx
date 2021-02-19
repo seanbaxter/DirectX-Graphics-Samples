@@ -103,7 +103,8 @@ void vert() {
   shader_out<0, vec4> = mix(vec4(1, .1, .1, 1), shader_in<0, vec4>, mag);
 
   // Pass the position out.
-  shader_out<1, vec3> = particle.pos.xyz;
+  // shader_out<1, vec3> = particle.pos.xyz;
+  glvert_Output.Position = particle.pos;
 }
 
 struct gs_uniforms_t {
@@ -132,13 +133,13 @@ void geom() {
 
   // Load color and position from the vertex shader.
   vec4 color = shader_in<0, vec4[1]>[0];
-  vec3 center = shader_in<1, vec3[1]>[0];
+  vec3 center = glgeom_Input[0].Position.xyz;// shader_in<1, vec3[1]>[0];
 
   @meta for(int i = 0; i < 4; ++i) {{
     // Write a billboard corner.
     vec3 pos = center + (mat3)gs_uniforms.invView * (radius * corners[i]);
     glgeom_Output.Position = gs_uniforms.worldViewProj * vec4(pos, 1);
-    
+
     // Pass uv and color to the frag shader.
     shader_out<0, vec2> = uv[i];
     shader_out<1, vec4> = color;

@@ -53,18 +53,6 @@
     <ClInclude Include="UILayer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="magnify_ps.hlsl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="magnify_vs.hlsl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="wave_ps.hlsl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="wave_vs.hlsl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="D3D12SM6WaveIntrinsics.cpp">
