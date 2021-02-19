@@ -12,7 +12,6 @@ struct uniforms_t {
   vec2 resolution;
   float time;
   uint render_mode;
-  uint lane_size;
 };
 
 [[spirv::uniform(0)]]
@@ -52,7 +51,7 @@ void wave_frag() {
 
     case 2: {
       // Color by lane ID.
-      float x = gl_SubgroupInvocationID / float(u.lane_size);
+      float x = (float)gl_SubgroupInvocationID / gl_SubgroupSize;
       color = vec4(x, x, x, 1);
       break;
     }
@@ -72,7 +71,7 @@ void wave_frag() {
       break;
  
     case 5: {
-      float active_ratio = get_num_active_lanes() / float(u.lane_size);
+      float active_ratio = (float)get_num_active_lanes() / gl_SubgroupSize;
       color = vec4(active_ratio, active_ratio, active_ratio, 1);
       break;
     }
@@ -89,12 +88,12 @@ void wave_frag() {
     }
 
     case 8: {
-      // First, compute the prefix sum of distance each lane to first lane.
-      vec4 base_pos = gl_subgroupBroadcastFirst(pos);
-      vec4 prefix_sum = gl_subgroupExclusiveAdd(pos - base_pos);
+      // First, compute the prefix sum color each lane to first lane.
+      vec4 base_color = gl_subgroupBroadcastFirst(color);
+      vec4 prefix_color = gl_subgroupExclusiveAdd(color - base_color);
 
       // Then, normalize by the number of active lanes.
-      color = prefix_sum / get_num_active_lanes();
+      color = prefix_color / get_num_active_lanes();
       break;
     }
 
