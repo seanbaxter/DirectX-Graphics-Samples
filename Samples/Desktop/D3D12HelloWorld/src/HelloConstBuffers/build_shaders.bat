@@ -2,6 +2,7 @@
 wsl circle -shader -emit-dxil -c shaders.cxx -E vert -o vert.dxil & dxil-signing vert.dxil
 
 :: fragment shaders
+wsl circle -shader -emit-dxil -c shaders.cxx -E fractal -o fractal.dxil && dxil-signing fractal.dxil
 wsl circle -shader -emit-dxil -c shaders.cxx -E devil -o devil.dxil && dxil-signing devil.dxil
 wsl circle -shader -emit-dxil -c shaders.cxx -E square -o square.dxil && dxil-signing square.dxil
 wsl circle -shader -emit-dxil -c shaders.cxx -E modulation -o modulation.dxil && dxil-signing modulation.dxil

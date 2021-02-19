@@ -34,6 +34,7 @@ D3D12_SHADER_BYTECODE get_bytecode(std::vector<char>& vec) {
 const char* vert_shader_file = "vert.dxil";
 
 const char* frag_shader_files[]{
+  "fractal.dxil",
   "devil.dxil",
   "square.dxil",
   "modulation.dxil",
